@@ -1,11 +1,19 @@
 const DB_KEY = "fufuratuVipCards_v1";
 const TX_KEY = "fufuratuVipTransactions_v1";
+const CONFIG = { API_URL: "https://script.google.com/macros/s/AKfycbwjYklhVmn2Q-3e7crSKw6FfO-qP053nUgn3zVlcfQkzrVrJjbA-Thliv8yk5pyFg0qVg/exec" };
+let remoteReady=false, syncTimer=null;
+function apiConfigured(){return CONFIG.API_URL.startsWith("https://script.google.com/macros/s/")&&CONFIG.API_URL.endsWith("/exec")}
+function setSyncLabel(t){const e=document.getElementById("syncStatus");if(e)e.textContent=t}
+function saveLocal(k,v){localStorage.setItem(k,JSON.stringify(v))}
+async function remoteLoad(){if(!apiConfigured()){setSyncLabel("Google Sheets belum dihubungkan — ikuti README.md");return}setSyncLabel("Menghubungkan ke Google Sheets…");try{const r=await fetch(CONFIG.API_URL+"?action=getAll",{cache:"no-store"});const d=await r.json();if(!d.ok)throw Error(d.error||"Gagal membaca data");saveLocal(DB_KEY,Array.isArray(d.cards)?d.cards:[]);saveLocal(TX_KEY,Array.isArray(d.transactions)?d.transactions:[]);remoteReady=true;setSyncLabel("Terhubung ke Google Sheets");renderDashboard();renderCards();renderTxns();refreshDatalists()}catch(e){setSyncLabel("Gagal terhubung — periksa URL/deployment");console.error(e)}}
+function remoteSync(){if(!apiConfigured()||!remoteReady)return;clearTimeout(syncTimer);syncTimer=setTimeout(async()=>{try{setSyncLabel("Mengirim perubahan ke Google Sheets…");await fetch(CONFIG.API_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"syncAll",cards:load(DB_KEY),transactions:load(TX_KEY)})});setSyncLabel("Permintaan sinkronisasi dikirim ke Google Sheets")}catch(e){setSyncLabel("Sinkronisasi gagal — ekspor CSV sebagai cadangan");console.error(e)}},500)}
+
 const $ = id => document.getElementById(id);
 let scanner = null;
 let scanning = false;
 
 function load(key){try{return JSON.parse(localStorage.getItem(key)||"[]")}catch{return []}}
-function save(key,data){localStorage.setItem(key,JSON.stringify(data))}
+function save(key,data){saveLocal(key,data);remoteSync()}
 function cards(){return load(DB_KEY)}
 function txns(){return load(TX_KEY)}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
@@ -63,3 +71,4 @@ function exportTxns(){downloadCSV("fufuratu-riwayat-transaksi.csv",[["Waktu","Ta
 $("exportTxns").addEventListener("click",exportTxns);$("exportAll").addEventListener("click",()=>{exportCards();setTimeout(exportTxns,300)});
 function init(){if(!localStorage.getItem(DB_KEY))save(DB_KEY,[]);if(!localStorage.getItem(TX_KEY))save(TX_KEY,[]);renderDashboard();renderCards();renderTxns();refreshDatalists();$("issuedAt").value=today()}
 init();
+remoteLoad();
